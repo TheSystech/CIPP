@@ -712,6 +712,11 @@ export const nativeMenuItems = [
         permissions: ['Sharepoint.Site.*'],
       },
       {
+        title: 'Permissions Report',
+        path: '/teams-share/permissions-report',
+        permissions: ['Sharepoint.Site.*'],
+      },
+      {
         title: 'External Users',
         path: '/teams-share/external-users',
         permissions: ['Sharepoint.Site.*'],
@@ -1104,7 +1109,7 @@ export const nativeMenuItems = [
         scope: 'global',
       },
       {
-        title: 'Community Repositories',
+        title: 'Catalog',
         path: '/tools/community-repos',
         roles: ['editor', 'admin', 'superadmin'],
         permissions: ['CIPP.Core.*'],
