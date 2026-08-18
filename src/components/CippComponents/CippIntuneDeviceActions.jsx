@@ -6,6 +6,7 @@ import {
   Password,
   PasswordOutlined,
   Key,
+  Memory,
   Edit,
   Security,
   FindInPage,
@@ -14,6 +15,7 @@ import {
   Recycling,
   ManageAccounts,
   GroupAdd,
+  RemoveModerator,
 } from '@mui/icons-material'
 
 // Shared between the MEM devices list page and the View Device detail page.
@@ -205,6 +207,19 @@ export const getIntuneDeviceActions = ({ tenantFilter } = {}) => [
     confirmText: 'Are you sure you want to rotate the password for [deviceName]?',
   },
   {
+    label: 'Retrieve BIOS Password',
+    type: 'POST',
+    icon: <Memory />,
+    url: '/api/ExecGetRecoveryKey',
+    data: {
+      // hardwarePasswordDetails is keyed on the Intune managedDevice id, not azureADDeviceId.
+      GUID: 'id',
+      RecoveryKeyType: '!BiosPassword',
+    },
+    condition: (row) => row.operatingSystem === 'Windows',
+    confirmText: 'Are you sure you want to retrieve the BIOS password for [deviceName]?',
+  },
+  {
     label: 'Retrieve BitLocker Keys',
     type: 'POST',
     icon: <Key />,
@@ -289,6 +304,19 @@ export const getIntuneDeviceActions = ({ tenantFilter } = {}) => [
     },
     confirmText:
       'Are you sure you want to update the Windows Defender signatures for [deviceName]?',
+  },
+  {
+    label: 'Offboard from Defender for Endpoint',
+    type: 'POST',
+    icon: <RemoveModerator />,
+    url: '/api/ExecDeviceAction',
+    data: {
+      GUID: 'azureADDeviceId',
+      Action: 'offboardMDEDevice',
+    },
+    condition: (row) => row.operatingSystem === 'Windows',
+    confirmText:
+      'Are you sure you want to offboard [deviceName] from Microsoft Defender for Endpoint? This queues an offboarding action via the MDE API and cannot be undone without re-onboarding the device.',
   },
   // This endpoint currently does not work, Graph just returns an error. Leaving this here for now in case it is fixed in the future. -Zac
   // {
@@ -425,5 +453,51 @@ export const getIntuneDeviceActions = ({ tenantFilter } = {}) => [
       Action: 'retire',
     },
     confirmText: 'Are you sure you want to retire [deviceName]?',
+  },
+]
+
+// Scoped actions for Compromise Remediation Check 9 — Retire + full factory wipe
+// (keepUserData/keepEnrollmentData false). Not the MEM cleanWindowsDevice "Wipe Device" variants.
+export const getBecIntuneDeviceActions = ({ tenantFilter } = {}) => [
+  {
+    label: 'View Device',
+    link: `/endpoint/MEM/devices/device?deviceId=[id]&tenantFilter=${tenantFilter}`,
+    color: 'info',
+    icon: <EyeIcon />,
+    multiPost: false,
+  },
+  {
+    label: 'View in Intune',
+    link: `https://intune.microsoft.com/${tenantFilter}/#view/Microsoft_Intune_Devices/DeviceSettingsMenuBlade/~/overview/mdmDeviceId/[id]`,
+    color: 'info',
+    icon: <EyeIcon />,
+    target: '_blank',
+    multiPost: false,
+    external: true,
+  },
+  {
+    label: 'Retire device',
+    type: 'POST',
+    icon: <Recycling />,
+    url: '/api/ExecDeviceAction',
+    data: {
+      GUID: 'id',
+      Action: 'retire',
+    },
+    confirmText: 'Are you sure you want to retire [deviceName]?',
+  },
+  {
+    label: 'Wipe device (remove enrollment)',
+    type: 'POST',
+    icon: <RestartAlt />,
+    url: '/api/ExecDeviceAction',
+    data: {
+      GUID: 'id',
+      Action: 'wipe',
+      keepUserData: false,
+      keepEnrollmentData: false,
+    },
+    confirmText:
+      'Are you sure you want to factory-wipe [deviceName]? This removes all data and Intune enrollment. This cannot be undone.',
   },
 ]

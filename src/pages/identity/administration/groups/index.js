@@ -12,6 +12,7 @@ import {
   GroupSharp,
   CloudSync,
   RocketLaunch,
+  PersonAdd,
 } from '@mui/icons-material'
 import { Stack } from '@mui/system'
 import { useState } from 'react'
@@ -21,6 +22,7 @@ import { useCippReportDB } from '../../../../components/CippComponents/CippRepor
 const Page = () => {
   const pageTitle = 'Groups'
   const [showMembers, setShowMembers] = useState(false)
+  const [showOwners, setShowOwners] = useState(false)
   const { currentTenant } = useSettings()
 
   const reportDB = useCippReportDB({
@@ -35,7 +37,19 @@ const Page = () => {
   })
 
   const handleMembersToggle = () => {
-    setShowMembers(!showMembers)
+    setShowMembers((prev) => {
+      const next = !prev
+      if (next) setShowOwners(false)
+      return next
+    })
+  }
+
+  const handleOwnersToggle = () => {
+    setShowOwners((prev) => {
+      const next = !prev
+      if (next) setShowMembers(false)
+      return next
+    })
   }
   const actions = [
     {
@@ -52,6 +66,81 @@ const Page = () => {
       multiPost: false,
       icon: <Edit />,
       color: 'success',
+    },
+    {
+      label: 'Add Member',
+      type: 'POST',
+      url: '/api/EditGroup',
+      icon: <PersonAdd />,
+      customDataformatter: (row, action, formData) => {
+        // Members picked in the dialog already carry {label, value: id, addedFields}
+        const addMember = [...(formData.AddMember ?? [])]
+        // CSV rows only carry a userPrincipalName; without a value the backend
+        // resolves the directory object id itself
+        ;(formData.bulkMember ?? []).forEach((csvRow) => {
+          const upnKey = Object.keys(csvRow).find(
+            (key) => key.trim().toLowerCase() === 'userprincipalname'
+          )
+          const userPrincipalName = upnKey ? csvRow[upnKey]?.trim() : undefined
+          if (userPrincipalName) {
+            addMember.push({
+              label: userPrincipalName,
+              addedFields: { userPrincipalName: userPrincipalName },
+            })
+          }
+        })
+
+        // Handle multiple groups - return an array of requests (one per group)
+        const selectedGroups = Array.isArray(row) ? row : [row]
+        return selectedGroups.map((group) => ({
+          AddMember: addMember,
+          tenantFilter: group.Tenant ?? currentTenant,
+          groupId: group.id,
+          groupName: group.displayName,
+          groupType: group.groupType,
+        }))
+      },
+      fields: [
+        {
+          type: 'autoComplete',
+          name: 'AddMember',
+          label: 'Select users to add as members',
+          multiple: true,
+          creatable: false,
+          api: {
+            url: '/api/ListGraphRequest',
+            data: {
+              Endpoint: 'users',
+              $select: 'id,displayName,userPrincipalName',
+              $top: 999,
+              $count: true,
+            },
+            dataKey: 'Results',
+            labelField: (user) => `${user.displayName} (${user.userPrincipalName})`,
+            valueField: 'id',
+            addedField: {
+              userPrincipalName: 'userPrincipalName',
+              displayName: 'displayName',
+            },
+            queryKey: 'ListUsersAutoComplete',
+            showRefresh: true,
+          },
+          validators: {
+            validate: (value, formValues) =>
+              (Array.isArray(value) && value.length > 0) ||
+              (Array.isArray(formValues.bulkMember) && formValues.bulkMember.length > 0) ||
+              'Select at least one user or upload a CSV',
+          },
+        },
+        {
+          type: 'CSVReader',
+          name: 'bulkMember',
+        },
+      ],
+      confirmText:
+        'Select the users to add as members to [displayName], or drop a CSV file with a userPrincipalName column to bulk add members.',
+      multiPost: false,
+      allowResubmit: true,
     },
     {
       label: 'Set Global Address List Visibility',
@@ -348,9 +437,14 @@ const Page = () => {
         cardButton={
           <Stack direction="row" spacing={1} alignItems="center">
             {!reportDB.useReportDB && (
-              <Button onClick={handleMembersToggle}>
-                {showMembers ? 'Hide Members' : 'Show Members'}
-              </Button>
+              <>
+                <Button onClick={handleMembersToggle}>
+                  {showMembers ? 'Hide Members' : 'Show Members'}
+                </Button>
+                <Button onClick={handleOwnersToggle}>
+                  {showOwners ? 'Hide Owners' : 'Show Owners'}
+                </Button>
+              </>
             )}
             <Button component={Link} href="groups/add" startIcon={<GroupAdd />}>
               Add Group
@@ -362,17 +456,27 @@ const Page = () => {
             >
               Deploy Group Template
             </Button>
-            {reportDB.controls}
           </Stack>
         }
+        dataSourceControls={reportDB.controls}
         apiUrl={reportDB.resolvedApiUrl}
-        apiData={reportDB.useReportDB ? undefined : { expandMembers: showMembers }}
+        apiData={
+          reportDB.useReportDB
+            ? undefined
+            : showMembers
+              ? { expandMembers: true }
+              : showOwners
+                ? { expandOwners: true }
+                : {}
+        }
         queryKey={
           reportDB.useReportDB
             ? reportDB.resolvedQueryKey
             : showMembers
               ? `groups-with-members-${currentTenant}`
-              : `groups-without-members-${currentTenant}`
+              : showOwners
+                ? `groups-with-owners-${currentTenant}`
+                : `groups-${currentTenant}`
         }
         actions={actions}
         offCanvas={offCanvas}
