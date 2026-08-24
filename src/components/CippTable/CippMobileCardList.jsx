@@ -94,6 +94,7 @@ export const CippMobileCardList = (props) => {
     onRowAction,
     onMoreInfo,
     isActionDisabled,
+    getActionRow = (row) => row,
     selectMode = false,
     cardButton,
     mobileCard,
@@ -136,7 +137,8 @@ export const CippMobileCardList = (props) => {
 
   const rowActionItems = (row) =>
     (actions ?? []).filter(
-      (action) => typeof action.hideCondition !== "function" || !action.hideCondition(row.original)
+      (action) =>
+        typeof action.hideCondition !== "function" || !action.hideCondition(getActionRow(row.original))
     );
 
   // Detail rows that would waste space: empty values, or values already shown as the
@@ -283,6 +285,8 @@ export const CippMobileCardList = (props) => {
                                 display: "inline-flex",
                                 alignItems: "center",
                                 gap: 0.5,
+                                // long column names: caption ellipsizes, icon stays inside the card clip
+                                maxWidth: "100%",
                                 ...(isBareBoolean && {
                                   border: 1,
                                   borderColor: "divider",

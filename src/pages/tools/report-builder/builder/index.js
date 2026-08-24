@@ -35,6 +35,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { renderCustomScriptMarkdownTemplate } from '../../../../utils/customScriptTemplate'
 import { getCippLicenseTranslation } from '../../../../utils/get-cipp-license-translation'
+import { isCloudPcDevice } from '../../../../utils/is-cloud-pc-device'
 import {
   escapeTableCell,
   isTableSeparatorRow,
@@ -760,7 +761,13 @@ const formatDatabaseContent = (data, selectedHeaders, format) => {
     const obj = {}
     selectedHeaders.forEach((h) => {
       const val = row[h] !== undefined && row[h] !== null ? row[h] : ''
-      obj[h] = isLicenseAssignmentValue(val) ? getCippLicenseTranslation(val).join(', ') : val
+      if (h === 'isEncrypted' && val !== true && isCloudPcDevice(row)) {
+        // Cloud PCs never report BitLocker but are platform-encrypted by Azure. Matches the
+        // cell rendering the backend applies when the report is generated.
+        obj[h] = 'Encrypted (platform-managed)'
+      } else {
+        obj[h] = isLicenseAssignmentValue(val) ? getCippLicenseTranslation(val).join(', ') : val
+      }
     })
     return obj
   })
@@ -1214,6 +1221,31 @@ const Page = () => {
     }
   }
 
+  // One click after picking a suite adds every test in it, instead of selecting them one by one.
+  const handleAddAllSuiteTests = () => {
+    if (!watchTestSuite?.value || filteredTestOptions.length === 0) return
+    setBlocks((prev) => [
+      ...prev,
+      ...filteredTestOptions.map((test, i) => ({
+        id: `block-${Date.now()}-${i}`,
+        type: 'test',
+        testId: test.value,
+        testCategory: test.category,
+        title: test.name || test.label,
+        content: getTestContent(test.value),
+        status: getTestStatus(test.value),
+        static: false,
+      })),
+    ])
+    addBlockForm.reset({
+      blockType: null,
+      testSuite: null,
+      selectedTest: [],
+      dbCacheType: null,
+      dbFormat: null,
+    })
+  }
+
   const handleRemoveBlock = (index) => setBlocks((prev) => prev.filter((_, i) => i !== index))
 
   const handleMoveBlockUp = (index) => {
@@ -1518,6 +1550,17 @@ const Page = () => {
                       isFetching={availableTestsApi.isFetching}
                       disabled={!watchTestSuite?.value}
                     />
+                  </Grid>
+                  <Grid size={{ xs: 12, md: 2 }}>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      startIcon={<Add />}
+                      onClick={handleAddAllSuiteTests}
+                      disabled={!watchTestSuite?.value || filteredTestOptions.length === 0}
+                    >
+                      Add All Tests
+                    </Button>
                   </Grid>
                 </CippFormCondition>
                 <CippFormCondition
