@@ -27,7 +27,7 @@ import { Grid } from "@mui/system";
 import { SvgIcon, Typography, Card, CardHeader, Divider } from "@mui/material";
 import { CippBannerListCard } from "../../../../../components/CippCards/CippBannerListCard";
 import { CippTimeAgo } from "../../../../../components/CippComponents/CippTimeAgo";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { EyeIcon, PencilIcon, TrashIcon } from "@heroicons/react/24/outline";
 import { CippDataTable } from "../../../../../components/CippTable/CippDataTable";
 import { PropertyList } from "../../../../../components/property-list";
@@ -62,6 +62,7 @@ const Page = () => {
   const groupBulkRequest = ApiPostCall({
     urlFromData: true,
   });
+  const bulkFetchedForId = useRef(null);
 
   function refreshFunction() {
     if (!groupId) return;
@@ -83,11 +84,12 @@ const Page = () => {
       },
     ];
 
+    bulkFetchedForId.current = groupId;
     groupBulkRequest.mutate({
       url: "/api/ListGraphBulkRequest",
       data: {
         Requests: requests,
-        tenantFilter: userSettingsDefaults.currentTenant,
+        tenantFilter: router.query.tenantFilter ?? userSettingsDefaults.currentTenant,
       },
     });
   }
@@ -97,11 +99,11 @@ const Page = () => {
       groupId &&
       userSettingsDefaults.currentTenant &&
       groupRequest.isSuccess &&
-      !groupBulkRequest.isSuccess
+      bulkFetchedForId.current !== groupId
     ) {
       refreshFunction();
     }
-  }, [groupId, userSettingsDefaults.currentTenant, groupRequest.isSuccess, groupBulkRequest.isSuccess]);
+  }, [groupId, userSettingsDefaults.currentTenant, groupRequest.isSuccess]);
 
   // Handle response structure - ListGraphRequest may wrap single items in Results array
   let groupData = null;
@@ -532,6 +534,7 @@ const Page = () => {
                   icon: <EyeIcon />,
                   label: "View User",
                   link: `/identity/administration/users/user?userId=[id]&tenantFilter=${userSettingsDefaults.currentTenant}`,
+                  pinned: true,
                   condition: (row) => row["@odata.type"] === "#microsoft.graph.user",
                 },
               ],
@@ -586,6 +589,7 @@ const Page = () => {
                   icon: <EyeIcon />,
                   label: "View User",
                   link: `/identity/administration/users/user?userId=[id]&tenantFilter=${userSettingsDefaults.currentTenant}`,
+                  pinned: true,
                   condition: (row) => row["@odata.type"] === "#microsoft.graph.user",
                 },
               ],
@@ -642,12 +646,14 @@ const Page = () => {
                   icon: <EyeIcon />,
                   label: "View Group",
                   link: `/identity/administration/groups/group?groupId=[id]&tenantFilter=${userSettingsDefaults.currentTenant}`,
+                  pinned: true,
                   condition: (row) => row["@odata.type"] === "#microsoft.graph.group",
                 },
                 {
                   icon: <PencilIcon />,
                   label: "Edit Group",
                   link: "/identity/administration/groups/edit?groupId=[id]&groupType=[calculatedGroupType]",
+                  pinned: true,
                   condition: (row) => row["@odata.type"] === "#microsoft.graph.group",
                 },
               ],

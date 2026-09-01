@@ -1,12 +1,15 @@
 import { MaterialReactTable, useMaterialReactTable } from 'material-react-table'
 import {
+  alpha,
   Card,
   CardContent,
   CardHeader,
   Divider,
   ListItemIcon,
   ListItemText,
+  Menu,
   MenuItem,
+  MenuList,
   SvgIcon,
   Typography,
 } from '@mui/material'
@@ -42,9 +45,23 @@ import {
   subTableShowsCachedColumn,
   resolveSubTableSimpleColumns,
   getSubTableDisplayColumnIds,
-  columnOrderHasStaleIds,
+  getInactiveSubTableColumnIds,
+  sanitizeColumnOrder,
 } from './util-subTables'
 import { attachParentRow, getRowTenant } from '../../utils/resolve-row-templates'
+import {
+  dispatchRowOpen,
+  partitionRowMenuActions,
+  filterVisibleRowActions,
+  rowOpenEnabled,
+  rowOpenSupportsNewTab,
+} from './util-row-open'
+import {
+  hasTextSelection,
+  isRowTextInteraction,
+} from './util-row-text-interaction'
+
+const ROW_CONTEXT_MENU_MAX_HEIGHT = 360
 
 // Resolve dot-delimited property paths against arbitrary data objects.
 const getNestedValue = (source, path) => {
@@ -315,6 +332,47 @@ const MUI_TABLE_HEAD_CELL_PROPS = {
   },
 }
 
+// Stable keys for row context — reference equality breaks after React Query refetches.
+const ROW_CONTEXT_KEY_FIELDS = [
+  'id',
+  'RowKey',
+  'GUID',
+  'userId',
+  'appId',
+  'azureAdUserId',
+  'tenantId',
+]
+
+const getRowContextKey = (row) => {
+  if (!row || typeof row !== 'object') {
+    return null
+  }
+  for (const field of ROW_CONTEXT_KEY_FIELDS) {
+    const value = row[field]
+    if (value != null && value !== '') {
+      return String(value)
+    }
+  }
+  return null
+}
+
+const rowsMatchContext = (a, b) => {
+  if (a === b) {
+    return true
+  }
+  const keyA = getRowContextKey(a)
+  const keyB = getRowContextKey(b)
+  if (keyA && keyB) {
+    return keyA === keyB
+  }
+  return false
+}
+
+const isRowClickTarget = (event) =>
+  event.target?.closest?.(
+    'button, a, input, textarea, select, [role="button"], [role="menuitem"], [data-no-row-click="true"]'
+  )
+
 const MUI_TABLE_BODY_CELL_ON_COPY = (e) => {
   const sel = window.getSelection()?.toString() ?? ''
   if (sel) {
@@ -328,7 +386,23 @@ const MUI_TABLE_BODY_CELL_ON_COPY = (e) => {
   }
 }
 
-const MUI_TABLE_BODY_CELL_PROPS = { onCopy: MUI_TABLE_BODY_CELL_ON_COPY }
+const MUI_TABLE_BODY_CELL_PROPS = {
+  onCopy: MUI_TABLE_BODY_CELL_ON_COPY,
+  sx: {
+    cursor: 'inherit',
+    '& .cipp-cell-text': {
+      cursor: 'text',
+      userSelect: 'text',
+    },
+    '& .MuiSvgIcon-root': {
+      cursor: 'inherit',
+    },
+    '& a, & button, & [role="button"], & .MuiChip-root, & .MuiIconButton-root, & .MuiButton-root, & .MuiCheckbox-root':
+      {
+        cursor: 'pointer',
+      },
+  },
+}
 
 const MRT_THEME = (theme) => ({
   baseBackgroundColor: theme.palette.background.paper,
@@ -447,12 +521,14 @@ export const CippDataTable = (props) => {
     exportEnabled = true,
     simpleColumns = [],
     dataFilter,
+    dataMap,
     actions,
     title = 'Report',
     simple = false,
     cardButton,
     offCanvas = false,
     offCanvasOnRowClick = false,
+    rowOpen,
     noCard = false,
     hideTitle = false,
     refreshFunction,
@@ -497,10 +573,16 @@ export const CippDataTable = (props) => {
     useState(simpleColumns)
   const [usedData, setUsedData] = useState(data)
   const [usedColumns, setUsedColumns] = useState([])
+  // Controlled so we can drop stale ids (membersCsv ↔ members) in the same render
+  // as displayColumns changes — a post-render setColumnOrder is too late; MRT throws first.
+  const [columnOrder, setColumnOrder] = useState(() => [...simpleColumns])
   const lastOrderedSelectionRef = useRef(null)
   const [offcanvasVisible, setOffcanvasVisible] = useState(false)
   const [offCanvasData, setOffCanvasData] = useState({})
   const [offCanvasRowIndex, setOffCanvasRowIndex] = useState(0)
+  const [contextRow, setContextRow] = useState(null)
+  const [rowContextMenu, setRowContextMenu] = useState(null)
+  const rowClickStartRef = useRef(null)
   const [customComponentData, setCustomComponentData] = useState({})
   const [customComponentVisible, setCustomComponentVisible] = useState(false)
   const [actionData, setActionData] = useState({
@@ -632,8 +714,13 @@ export const CippDataTable = (props) => {
         const nestedData = getNestedValue(page, api.dataKey)
         return nestedData !== undefined ? nestedData : []
       })
+      const filtered = dataFilter
+        ? combinedResults.filter(dataFilter)
+        : combinedResults
       setUsedData(
-        dataFilter ? combinedResults.filter(dataFilter) : combinedResults
+        typeof dataMap === 'function'
+          ? filtered.map((row) => dataMap(row, { parentRow }))
+          : filtered
       )
     }
   }, [
@@ -642,6 +729,9 @@ export const CippDataTable = (props) => {
     api.dataKey,
     getRequestData.isFetching,
     queryKey,
+    dataFilter,
+    dataMap,
+    parentRow,
   ])
 
   // Derive columns from data — only when the data schema actually changes.
@@ -731,7 +821,7 @@ export const CippDataTable = (props) => {
             ...subTableIds,
           ]),
         ]
-        table.setColumnOrder(orderColumnsBySelection(allIds, finalResolvedColumns))
+        setColumnOrder(orderColumnsBySelection(allIds, finalResolvedColumns))
       }
     } else {
       const providedColumnKeys = new Set(
@@ -886,6 +976,9 @@ export const CippDataTable = (props) => {
     }
     const cachedHeaders = new Map()
     const injected = []
+    const excludedIds = new Set(
+      getInactiveSubTableColumnIds(subTables, configuredSimpleColumns, usedData)
+    )
     for (const sub of subTables) {
       if (!subTableIsSelected(sub, configuredSimpleColumns)) {
         continue
@@ -906,8 +999,48 @@ export const CippDataTable = (props) => {
     const injectedById = new Map(injected.map((col) => [col.id, col]))
     const replaced = columns.map((col) => injectedById.get(col.id) ?? col)
     const existing = new Set(columns.map((col) => col.id))
-    return [...replaced, ...injected.filter((col) => !existing.has(col.id))]
+    return [...replaced, ...injected.filter((col) => !existing.has(col.id))].filter(
+      (col) => !excludedIds.has(col.id)
+    )
   }, [usedColumns, usedData, subTables, configuredSimpleColumns])
+
+  const displayColumnIds = useMemo(
+    () => displayColumns.map((col) => col.id).filter(Boolean),
+    [displayColumns]
+  )
+
+  // Remount MRT when the visible column identity set changes (cache↔live). MRT's
+  // column virtualizer memoizes pinned indexes without depending on column count;
+  // without a remount, TableHeadRow maps a sparse virtual item and reads `.index`
+  // on undefined.
+  const mrtColumnSetKey = useMemo(() => displayColumnIds.join('|'), [displayColumnIds])
+
+  const preferredColumnOrderIds = useMemo(
+    () =>
+      resolveSubTableSimpleColumns(
+        configuredSimpleColumns,
+        subTables,
+        usedData
+      ).filter((id) => displayColumnIds.includes(id)),
+    [configuredSimpleColumns, subTables, usedData, displayColumnIds]
+  )
+
+  // Same-render sanitize: toggling ReportDB cache↔live swaps membersCsv↔members (and
+  // drops CacheTimestamp). MRT column virtualization reads virtualItem.index during
+  // render and throws if columnOrder still names the old ids ("can't access property
+  // index, e is undefined" in Firefox). A useEffect setColumnOrder runs too late.
+  const safeColumnOrder = useMemo(
+    () =>
+      sanitizeColumnOrder(columnOrder, displayColumnIds, preferredColumnOrderIds),
+    [columnOrder, displayColumnIds, preferredColumnOrderIds]
+  )
+
+  useEffect(() => {
+    if (safeColumnOrder === columnOrder) {
+      return
+    }
+    setColumnOrder(safeColumnOrder)
+  }, [safeColumnOrder, columnOrder])
 
   useEffect(() => {
     if (!Array.isArray(subTables) || subTables.length === 0) {
@@ -979,40 +1112,6 @@ export const CippDataTable = (props) => {
     [settings?.sidebarCollapse]
   )
 
-  // Memoize row click props for offCanvas navigation.
-  const muiTableBodyRowProps = useMemo(() => {
-    if (offCanvasOnRowClick && offCanvas) {
-      return ({ row }) => ({
-        onClick: (event) => {
-          if (
-            event.target?.closest?.(
-              'button, a, input, textarea, select, [role="button"], [role="menuitem"], [data-no-row-click="true"]'
-            )
-          ) {
-            return
-          }
-
-          setOffCanvasData(row.original)
-          const navigable = table?.getSortedRowModel?.()?.rows
-          if (navigable) {
-            const indexInList = navigable.findIndex(
-              (r) => r.original === row.original
-            )
-            setOffCanvasRowIndex(indexInList >= 0 ? indexInList : 0)
-          }
-          setOffcanvasVisible(true)
-        },
-        sx: {
-          cursor: 'pointer',
-          '&:hover': {
-            backgroundColor: 'action.hover',
-          },
-        },
-      })
-    }
-    return undefined
-  }, [offCanvasOnRowClick, offCanvas])
-
   // Memoize the empty-rows fallback renderer.
   const queueMessage = getRequestData.data?.pages?.[0]?.Metadata?.QueueMessage
   const renderEmptyRowsFallback = useCallback(
@@ -1038,11 +1137,12 @@ export const CippDataTable = (props) => {
   const tableState = useMemo(
     () => ({
       columnVisibility: sanitizedColumnVisibility,
+      columnOrder: safeColumnOrder,
       sorting,
       columnFilters,
       showSkeletons,
     }),
-    [sanitizedColumnVisibility, sorting, columnFilters, showSkeletons]
+    [sanitizedColumnVisibility, safeColumnOrder, sorting, columnFilters, showSkeletons]
   )
 
   // Single row-action dispatch used by BOTH the desktop row menu and the mobile action
@@ -1094,12 +1194,192 @@ export const CippDataTable = (props) => {
   // position taken from it stops matching the list the moment a column is sorted.
   const openRowOffCanvas = useCallback((rowOriginal) => {
     setOffCanvasData(rowOriginal)
+    setContextRow(rowOriginal)
     const navigable = table.getSortedRowModel().rows
-    const indexInList = navigable.findIndex((r) => r.original === rowOriginal)
+    const indexInList = navigable.findIndex((r) =>
+      rowsMatchContext(r.original, rowOriginal)
+    )
     setOffCanvasRowIndex(indexInList >= 0 ? indexInList : 0)
     setOffcanvasVisible(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  const closeRowOffCanvas = useCallback(() => {
+    setOffcanvasVisible(false)
+    setContextRow(null)
+  }, [])
+
+  const handleRowOpenNewTab = useCallback(
+    (rowOriginal) => {
+      const actionRow = getActionRow(rowOriginal)
+      const tenant = getRowTenant(actionRow, settings.currentTenant)
+      const rowTenant =
+        tenant && tenant !== 'AllTenants' ? tenant : undefined
+      const dispatchOptions = {
+        fallbackTenant: rowTenant,
+        currentTenant: settings.currentTenant,
+        newTab: true,
+      }
+      if (!rowOpenSupportsNewTab(rowOpen, actionRow, dispatchOptions)) {
+        return
+      }
+      dispatchRowOpen(rowOpen, actionRow, router, dispatchOptions)
+    },
+    [rowOpen, getActionRow, settings, router]
+  )
+
+  const closeRowContextMenu = useCallback(() => {
+    setRowContextMenu(null)
+  }, [])
+
+  const getRowOpenDispatchOptions = useCallback(
+    (rowOriginal) => {
+      const actionRow = getActionRow(rowOriginal)
+      const tenant = getRowTenant(actionRow, settings.currentTenant)
+      const rowTenant =
+        tenant && tenant !== 'AllTenants' ? tenant : undefined
+      return {
+        actionRow,
+        rowTenant,
+        dispatchOptions: {
+          fallbackTenant: rowTenant,
+          currentTenant: settings.currentTenant,
+        },
+      }
+    },
+    [getActionRow, settings]
+  )
+
+  const getRowMenuActions = useCallback(
+    (rowOriginal) => {
+      const { actionRow, dispatchOptions } =
+        getRowOpenDispatchOptions(rowOriginal)
+      const visible = filterVisibleRowActions(actions, actionRow)
+      const { pinnedActions, menuActions } = partitionRowMenuActions(visible)
+      return { pinnedActions, menuActions, actionRow, dispatchOptions }
+    },
+    [actions, rowOpen, getRowOpenDispatchOptions]
+  )
+
+  // Desktop: middle-click or Ctrl/Cmd+click opens the resolved rowOpen href in a new
+  // tab; right-click opens the row context menu. Plain clicks only act on pages that
+  // opt in with offCanvasOnRowClick, where a single click opens the extended-info
+  // offcanvas. That preview is also in the context menu, the row ⋮ menu, and mobile tap.
+  const muiTableBodyRowProps = useMemo(() => {
+    const newTabOpen = Boolean(rowOpen?.link || rowOpen?.onOpen)
+    const clickOpensOffCanvas = Boolean(offCanvasOnRowClick && offCanvas)
+    const hasContextMenu = Boolean(
+      (actions && actions.length > 0) || offCanvas || newTabOpen
+    )
+
+    if (!hasContextMenu && !newTabOpen && !clickOpensOffCanvas) {
+      return undefined
+    }
+
+    return ({ row }) => {
+      const actionRow = getActionRow(row.original)
+      const canOpen = newTabOpen && rowOpenEnabled(rowOpen, actionRow)
+      const isContextRow =
+        Boolean(offCanvas) && rowsMatchContext(contextRow, row.original)
+
+      const rowProps = {
+        onContextMenu: (event) => {
+          if (!hasContextMenu) {
+            return
+          }
+          if (isRowClickTarget(event) || hasTextSelection()) {
+            return
+          }
+          event.preventDefault()
+          setRowContextMenu({
+            mouseX: event.clientX + 2,
+            mouseY: event.clientY - 6,
+            rowOriginal: row.original,
+          })
+        },
+        sx: {
+          cursor: clickOpensOffCanvas ? 'pointer' : undefined,
+          borderLeft: (theme) =>
+            isContextRow
+              ? `3px solid ${theme.palette.primary.main}`
+              : '3px solid transparent',
+          ...(isContextRow && {
+            bgcolor: (theme) =>
+              alpha(
+                theme.palette.primary.main,
+                theme.palette.mode === 'dark' ? 0.14 : 0.08
+              ),
+            '&:hover': {
+              bgcolor: (theme) =>
+                alpha(
+                  theme.palette.primary.main,
+                  theme.palette.mode === 'dark' ? 0.22 : 0.12
+                ),
+            },
+          }),
+          ...(!isContextRow && {
+            '&:hover': {
+              backgroundColor: 'action.hover',
+            },
+          }),
+        },
+      }
+
+      if (newTabOpen || clickOpensOffCanvas) {
+        Object.assign(rowProps, {
+          onMouseDown: (event) => {
+            if (isRowClickTarget(event)) {
+              return
+            }
+            if (event.button === 1) {
+              event.preventDefault()
+            }
+            rowClickStartRef.current = { x: event.clientX, y: event.clientY }
+          },
+          onClick: (event) => {
+            if (isRowClickTarget(event)) {
+              return
+            }
+            if (event.ctrlKey || event.metaKey) {
+              if (canOpen) {
+                event.preventDefault()
+                handleRowOpenNewTab(row.original)
+              }
+              return
+            }
+            if (!clickOpensOffCanvas) {
+              return
+            }
+            if (
+              isRowTextInteraction(rowClickStartRef.current, event) ||
+              hasTextSelection()
+            ) {
+              return
+            }
+            openRowOffCanvas(row.original)
+          },
+          onAuxClick: (event) => {
+            if (event.button !== 1 || isRowClickTarget(event) || !canOpen) {
+              return
+            }
+            event.preventDefault()
+            handleRowOpenNewTab(row.original)
+          },
+        })
+      }
+
+      return rowProps
+    }
+  }, [
+    offCanvas,
+    offCanvasOnRowClick,
+    rowOpen,
+    actions,
+    contextRow,
+    getActionRow,
+    handleRowOpenNewTab,
+    openRowOffCanvas,
+  ])
 
   // the flipped table shows whatever columns are visible; horizontal scroll covers the width
   const cardViewSurfaceRef = useRef(null)
@@ -1114,16 +1394,26 @@ export const CippDataTable = (props) => {
   // Memoize renderRowActionMenuItems to avoid re-creating on each render.
   const renderRowActionMenuItems = useMemo(() => {
     if (actions) {
-      return ({ closeMenu, row }) => [
-        actions
-          .filter(
-            // hideCondition removes an action from this row's menu entirely (vs.
-            // condition, which renders it disabled).
-            (action) =>
-              typeof action.hideCondition !== 'function' ||
-              !action.hideCondition(getActionRow(row.original))
-          )
-          .map((action, index) => (
+      return ({ closeMenu, row }) => {
+        const { actionRow } = getRowOpenDispatchOptions(row.original)
+        const visible = filterVisibleRowActions(actions, actionRow)
+        // Pinned actions stay in the order they are declared in the actions array.
+        const { pinnedActions, menuActions } = partitionRowMenuActions(visible)
+        return [
+          pinnedActions.map((action, index) => (
+            <MenuItem
+              sx={{ color: action.color }}
+              key={`actions-list-row-pinned-${index}`}
+              onClick={() => dispatchRowAction(action, row.original, closeMenu)}
+              disabled={handleActionDisabled(row.original, action)}
+            >
+              <SvgIcon fontSize="small" sx={{ minWidth: '30px' }}>
+                {action.icon}
+              </SvgIcon>
+              <ListItemText>{action.label}</ListItemText>
+            </MenuItem>
+          )),
+          menuActions.map((action, index) => (
             <MenuItem
               sx={{ color: action.color }}
               key={`actions-list-row-${index}`}
@@ -1136,26 +1426,30 @@ export const CippDataTable = (props) => {
               <ListItemText>{action.label}</ListItemText>
             </MenuItem>
           )),
-        offCanvas && (
-          <MenuItem
-            key={`actions-list-row-more`}
-            onClick={() => {
-              closeMenu()
-              openRowOffCanvas(row.original)
-            }}
-          >
-            <SvgIcon fontSize="small" sx={{ minWidth: '30px' }}>
-              <MoreHoriz />
-            </SvgIcon>
-            More Info
-          </MenuItem>
-        ),
-      ]
+          offCanvas && (
+            <MenuItem
+              key={`actions-list-row-more`}
+              onClick={() => {
+                closeMenu()
+                openRowOffCanvas(row.original)
+              }}
+            >
+              <SvgIcon fontSize="small" sx={{ minWidth: '30px' }}>
+                <MoreHoriz />
+              </SvgIcon>
+              More Info
+            </MenuItem>
+          ),
+        ]
+      }
     }
 
     if (offCanvas) {
-      return ({ closeMenu, row }) => (
+      // Must return an array: MRT only renders the row-actions toggle when the
+      // returned value has a length.
+      return ({ closeMenu, row }) => [
         <MenuItem
+          key="actions-list-row-more"
           onClick={() => {
             closeMenu()
             openRowOffCanvas(row.original)
@@ -1165,8 +1459,8 @@ export const CippDataTable = (props) => {
             <More fontSize="small" />
           </ListItemIcon>
           More Info
-        </MenuItem>
-      )
+        </MenuItem>,
+      ]
     }
 
     return undefined
@@ -1176,7 +1470,93 @@ export const CippDataTable = (props) => {
     dispatchRowAction,
     openRowOffCanvas,
     handleActionDisabled,
-    getActionRow,
+    getRowOpenDispatchOptions,
+  ])
+
+  const rowContextMenuContent = useMemo(() => {
+    if (!rowContextMenu) {
+      return null
+    }
+    const rowOriginal = rowContextMenu.rowOriginal
+    const { pinnedActions, menuActions } = getRowMenuActions(rowOriginal)
+    const hasPinned = Boolean(offCanvas) || pinnedActions.length > 0
+    const items = []
+
+    pinnedActions.forEach((action, index) => {
+      items.push(
+        <MenuItem
+          key={`row-context-pinned-${index}`}
+          sx={{ color: action.color }}
+          onClick={() =>
+            dispatchRowAction(action, rowOriginal, closeRowContextMenu)
+          }
+          disabled={handleActionDisabled(rowOriginal, action)}
+        >
+          <ListItemIcon sx={{ minWidth: 36 }}>
+            <SvgIcon fontSize="small">{action.icon}</SvgIcon>
+          </ListItemIcon>
+          <ListItemText>{action.label}</ListItemText>
+        </MenuItem>
+      )
+    })
+    if (offCanvas) {
+      items.push(
+        <MenuItem
+          key="row-context-more-info"
+          onClick={() => {
+            closeRowContextMenu()
+            openRowOffCanvas(rowOriginal)
+          }}
+        >
+          <ListItemIcon>
+            <MoreHoriz fontSize="small" />
+          </ListItemIcon>
+          <ListItemText>More Info</ListItemText>
+        </MenuItem>
+      )
+    }
+    if (hasPinned && menuActions.length > 0) {
+      items.push(<Divider key="row-context-divider" />)
+    }
+    if (menuActions.length > 0) {
+      items.push(
+        <MenuList
+          key="row-context-actions"
+          dense
+          disablePadding
+          sx={{
+            maxHeight: ROW_CONTEXT_MENU_MAX_HEIGHT,
+            overflowY: 'auto',
+          }}
+        >
+          {menuActions.map((action, index) => (
+            <MenuItem
+              key={`row-context-action-${index}`}
+              sx={{ color: action.color }}
+              onClick={() =>
+                dispatchRowAction(action, rowOriginal, closeRowContextMenu)
+              }
+              disabled={handleActionDisabled(rowOriginal, action)}
+            >
+              <ListItemIcon sx={{ minWidth: 36 }}>
+                <SvgIcon fontSize="small">{action.icon}</SvgIcon>
+              </ListItemIcon>
+              <ListItemText>{action.label}</ListItemText>
+            </MenuItem>
+          ))}
+        </MenuList>
+      )
+    }
+
+    return items
+  }, [
+    rowContextMenu,
+    offCanvas,
+    getRowMenuActions,
+    closeRowContextMenu,
+    openRowOffCanvas,
+    dispatchRowAction,
+    handleActionDisabled,
   ])
 
   // Stable renderTopToolbar — memoized so MaterialReactTable doesn't re-create the toolbar
@@ -1283,6 +1663,7 @@ export const CippDataTable = (props) => {
     onColumnFiltersChange: setColumnFilters,
     renderEmptyRowsFallback,
     onColumnVisibilityChange: setColumnVisibility,
+    onColumnOrderChange: setColumnOrder,
     ...modeInfo,
     // narrow table views size their scroll viewport from measurement (see the effect below),
     // the modeInfo calc budget only holds for desktop chrome
@@ -1316,29 +1697,6 @@ export const CippDataTable = (props) => {
     prevUsedDataRef.current = memoizedData
     table.toggleAllRowsSelected(false)
   }, [memoizedData])
-
-  // utilTableMode seeds columnOrder from simpleColumns (e.g. "members"), but cached report
-  // data shows membersCsv instead — MRT crashes if order references ids that are not in
-  // displayColumns.
-  useEffect(() => {
-    if (!Array.isArray(subTables) || subTables.length === 0) {
-      return
-    }
-    const displayIds = displayColumns.map((col) => col.id).filter(Boolean)
-    if (displayIds.length === 0) {
-      return
-    }
-    const currentOrder = table.getState().columnOrder ?? []
-    if (!columnOrderHasStaleIds(currentOrder, displayIds)) {
-      return
-    }
-    const selectedForOrder = resolveSubTableSimpleColumns(
-      configuredSimpleColumns,
-      subTables,
-      usedData
-    ).filter((id) => displayIds.includes(id))
-    table.setColumnOrder(orderColumnsBySelection(displayIds, selectedForOrder))
-  }, [configuredSimpleColumns, displayColumns, subTables, usedData, table])
 
   // size the narrow table's scroll viewport from where it actually sits: viewport height
   // minus the container's measured top, the real footer height and the chrome below the
@@ -1437,7 +1795,9 @@ export const CippDataTable = (props) => {
   // identity alone would strand the position — and is clamped so a list that shrank under
   // it can't report "6 of 2".
   const derivedRowIndex = offcanvasVisible
-    ? navigationRows.findIndex((row) => row.original === offCanvasData)
+    ? navigationRows.findIndex((row) =>
+        rowsMatchContext(row.original, offCanvasData)
+      )
     : -1
   const currentRowIndex =
     derivedRowIndex >= 0
@@ -1578,6 +1938,7 @@ export const CippDataTable = (props) => {
                 table={table}
                 actions={actions}
                 hasOffCanvas={!!offCanvas || Boolean(cardInfoFields?.length)}
+                openOffCanvasOnTap={!!offCanvas || Boolean(cardInfoFields?.length)}
                 onRowAction={dispatchRowAction}
                 onMoreInfo={openRowOffCanvas}
                 isActionDisabled={handleActionDisabled}
@@ -1607,7 +1968,7 @@ export const CippDataTable = (props) => {
             <>
               {(getRequestData.isSuccess ||
                 getRequestData.data?.pages.length >= 0 ||
-                data) && <MaterialReactTable table={table} />}
+                data) && <MaterialReactTable key={mrtColumnSetKey} table={table} />}
             </>
           )}
           {getRequestData.isError && !getRequestData.isFetchNextPageError && (
@@ -1656,7 +2017,7 @@ export const CippDataTable = (props) => {
                     {(getRequestData.isSuccess ||
                       getRequestData.data?.pages.length >= 0 ||
                       (data && !getRequestData.isError)) && (
-                      <MaterialReactTable table={table} />
+                      <MaterialReactTable key={mrtColumnSetKey} table={table} />
                     )}
                   </>
                 )}
@@ -1675,10 +2036,25 @@ export const CippDataTable = (props) => {
           )}
         </>
       )}
+      <Menu
+        open={Boolean(rowContextMenu)}
+        onClose={closeRowContextMenu}
+        anchorReference="anchorPosition"
+        anchorPosition={
+          rowContextMenu
+            ? { top: rowContextMenu.mouseY, left: rowContextMenu.mouseX }
+            : undefined
+        }
+        slotProps={{
+          paper: { sx: { minWidth: 220 } },
+        }}
+      >
+        {rowContextMenuContent}
+      </Menu>
       <CippOffCanvas
         isFetching={getRequestData.isFetching}
         visible={offcanvasVisible}
-        onClose={() => setOffcanvasVisible(false)}
+        onClose={closeRowOffCanvas}
         extendedData={offCanvasData}
         extendedInfoFields={offCanvas?.extendedInfoFields}
         title={offCanvasData?.Name || offCanvas?.title || 'Extended Info'}
@@ -1692,15 +2068,19 @@ export const CippDataTable = (props) => {
         onNavigateUp={() => {
           const newIndex = currentRowIndex - 1
           if (newIndex >= 0 && navigationRows[newIndex]) {
+            const nextRow = navigationRows[newIndex].original
             setOffCanvasRowIndex(newIndex)
-            setOffCanvasData(navigationRows[newIndex].original)
+            setOffCanvasData(nextRow)
+            setContextRow(nextRow)
           }
         }}
         onNavigateDown={() => {
           const newIndex = currentRowIndex + 1
           if (navigationRows[newIndex]) {
+            const nextRow = navigationRows[newIndex].original
             setOffCanvasRowIndex(newIndex)
-            setOffCanvasData(navigationRows[newIndex].original)
+            setOffCanvasData(nextRow)
+            setContextRow(nextRow)
           }
         }}
         canNavigateUp={currentRowIndex > 0}

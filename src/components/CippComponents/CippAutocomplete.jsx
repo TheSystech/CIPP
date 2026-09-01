@@ -120,6 +120,21 @@ export const CippAutoComplete = React.forwardRef((props, ref) => {
   const [internalValue, setInternalValue] = useState(null) // Track selected value internally
   const [open, setOpen] = useState(false) // Control popover open state
 
+  // Opt-in server-side search: instead of fetching every option once and filtering client-side,
+  // the typed text is sent to the API (api.searchParam) so the server returns only matches. Guarded
+  // by api.manualSearch so every existing autocomplete keeps its fetch-all-then-filter behaviour.
+  const manualSearch = !!api?.manualSearch
+  const searchParam = api?.searchParam ?? 'search'
+  const minSearchLength = api?.minSearchLength ?? 2
+  const [searchInput, setSearchInput] = useState('')
+  const [searchTerm, setSearchTerm] = useState('')
+  useEffect(() => {
+    if (!manualSearch) return undefined
+    // Debounce so a fast typist fires one request, not one per keystroke.
+    const handle = setTimeout(() => setSearchTerm(searchInput.trim()), api?.searchDebounce ?? 400)
+    return () => clearTimeout(handle)
+  }, [searchInput, manualSearch, api?.searchDebounce])
+
   // Sync internalValue when external value or defaultValue prop changes (e.g., when editing a form)
   useEffect(() => {
     const currentValue = value !== undefined && value !== null ? value : defaultValue
@@ -173,20 +188,25 @@ export const CippAutoComplete = React.forwardRef((props, ref) => {
     const currentApi = apiRef.current
     if (currentApi) {
       const tenantScoped = !currentApi.excludeTenantFilter
+      const baseQueryKey =
+        tenantScoped && currentApi.queryKey
+          ? `${currentApi.queryKey}-${currentTenant}`
+          : currentApi.queryKey
+      // In manual-search mode, hold the request until enough characters are typed so an empty or
+      // one-letter field never triggers a fetch-all against the API.
+      const enoughChars = !manualSearch || searchTerm.length >= minSearchLength
       setGetRequestInfo({
         url: currentApi.url,
         data: {
           ...(tenantScoped ? { tenantFilter: currentTenant } : null),
           ...currentApi.data,
+          ...(manualSearch && searchTerm ? { [searchParam]: searchTerm } : null),
         },
-        waiting: true,
-        queryKey:
-          tenantScoped && currentApi.queryKey
-            ? `${currentApi.queryKey}-${currentTenant}`
-            : currentApi.queryKey,
+        waiting: manualSearch ? enoughChars : true,
+        queryKey: manualSearch ? `${baseQueryKey}-${searchParam}-${searchTerm}` : baseQueryKey,
       })
     }
-  }, [apiUrl, apiQueryKey, currentTenant])
+  }, [apiUrl, apiQueryKey, currentTenant, manualSearch, searchTerm, searchParam, minSearchLength])
 
   // After the data is fetched, combine and map it
   useEffect(() => {
@@ -379,21 +399,47 @@ export const CippAutoComplete = React.forwardRef((props, ref) => {
     [memoizedOptions]
   )
 
-  // shape the seed for MUI: option arrays stay arrays, single objects wrap in multiple mode, strings resolve to options
+  // shape the seed for MUI: option arrays stay arrays, everything else must become an array in
+  // multiple mode (a bare object crashes MUI's selected.some dedup), strings and booleans resolve
+  // to options (booleans arrive from legacy data saved by a former switch field).
+  // An unseeded RHF Controller hands back '' / null - in multiple mode that means "nothing selected".
   const normalizedDefaultValue = useMemo(() => {
+    const isBareValue = (item) => typeof item === 'string' || typeof item === 'boolean'
     if (Array.isArray(resolvedDefaultValue)) {
       return resolvedDefaultValue.map((item) =>
-        typeof item === 'string' ? lookupOptionByValue(item) : item
+        isBareValue(item) ? lookupOptionByValue(item) : item
       )
     }
-    if (typeof resolvedDefaultValue === 'object' && multiple) {
-      return [resolvedDefaultValue]
+    if (multiple) {
+      if (
+        resolvedDefaultValue === null ||
+        resolvedDefaultValue === undefined ||
+        resolvedDefaultValue === ''
+      ) {
+        return []
+      }
+      return [
+        isBareValue(resolvedDefaultValue)
+          ? lookupOptionByValue(resolvedDefaultValue)
+          : resolvedDefaultValue,
+      ]
     }
-    if (typeof resolvedDefaultValue === 'string') {
+    if (isBareValue(resolvedDefaultValue)) {
       return lookupOptionByValue(resolvedDefaultValue)
     }
     return resolvedDefaultValue
   }, [resolvedDefaultValue, multiple, lookupOptionByValue])
+
+  // In manual-search mode, show the spinner for the whole "typing settled -> results back" window,
+  // including the debounce delay before the request fires, so the field never looks idle mid-search.
+  const searchPending =
+    manualSearch &&
+    searchInput.trim().length >= minSearchLength &&
+    searchInput.trim() !== searchTerm
+  const showLoading = actionGetRequest.isFetching || isFetching || searchPending
+  // freeSolo hides the popup icon (and its spinner), so a loading state needs to live in the input's
+  // end adornment instead - the standard MUI loading pattern.
+  const isFreeSolo = !!other?.freeSolo
 
   return (
     <>
@@ -410,7 +456,10 @@ export const CippAutoComplete = React.forwardRef((props, ref) => {
           }
           setOpen(false)
         }}
-        disabled={disabled || actionGetRequest.isFetching || isFetching}
+        disabled={
+          disabled ||
+          (!manualSearch && (actionGetRequest.isFetching || isFetching))
+        }
         popupIcon={
           actionGetRequest.isFetching || isFetching ? (
             <CircularProgress color="inherit" size={20} />
@@ -419,14 +468,20 @@ export const CippAutoComplete = React.forwardRef((props, ref) => {
           )
         }
         isOptionEqualToValue={(option, val) => option.value === val.value}
-        value={typeof value === 'string' ? lookupOptionByValue(value) : value}
+        value={
+          typeof value === 'string' || typeof value === 'boolean'
+            ? lookupOptionByValue(value)
+            : value
+        }
         filterSelectedOptions
         disableClearable={disableClearable}
         multiple={multiple}
         fullWidth
         placeholder={placeholder}
         filterOptions={(options, params) => {
-          const filtered = filter(options, params)
+          // Server-side search already returned only matches; client-side substring filtering would
+          // wrongly hide ANR results (a display-name match whose address lacks the typed text).
+          const filtered = manualSearch ? [...options] : filter(options, params)
           const isExisting =
             options?.length > 0 &&
             options.some(
@@ -570,7 +625,7 @@ export const CippAutoComplete = React.forwardRef((props, ref) => {
         renderInput={(params) => {
           // Handle custom action button inside the TextField
           const { InputProps, ...otherParams } = params
-          const modifiedInputProps =
+          const baseInputProps =
             customAction && customAction.position === 'inside'
               ? {
                   ...InputProps,
@@ -621,6 +676,33 @@ export const CippAutoComplete = React.forwardRef((props, ref) => {
                   ),
                 }
               : InputProps
+
+          // In freeSolo mode the popup-icon spinner is not rendered, so surface the loading state as
+          // an end-adornment spinner instead. The inline-flex wrapper vertically centres the small
+          // spinner against the taller clear button beside it.
+          const modifiedInputProps =
+            showLoading && isFreeSolo
+              ? {
+                  ...baseInputProps,
+                  endAdornment: (
+                    <>
+                      <Box
+                        component="span"
+                        sx={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          height: 28,
+                          mr: 0.5,
+                          verticalAlign: 'middle',
+                        }}
+                      >
+                        <CircularProgress color="inherit" size={18} />
+                      </Box>
+                      {baseInputProps?.endAdornment}
+                    </>
+                  ),
+                }
+              : baseInputProps
 
           return (
             <Stack direction="row" spacing={1}>
@@ -759,6 +841,15 @@ export const CippAutoComplete = React.forwardRef((props, ref) => {
           )
         }}
         {...other}
+        onInputChange={(event, newInputValue, reason) => {
+          other.onInputChange?.(event, newInputValue, reason)
+          if (!manualSearch) return
+          if (reason === 'input') {
+            setSearchInput(newInputValue)
+          } else if (reason === 'clear') {
+            setSearchInput('')
+          }
+        }}
       />
       {api?.templateView && (
         <CippOffCanvas
