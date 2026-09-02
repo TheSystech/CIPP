@@ -725,20 +725,24 @@ const CippAppPermissionBuilder = ({
               <Grid
                 container
                 spacing={2}
-                sx={{ display: "flex", alignItems: "center" }}
-                justifyContent="space-between"
-              >
+                sx={{
+                  justifyContent: "space-between",
+                  display: "flex",
+                  alignItems: "center"
+                }}>
                 <Grid size={{ xl: 8, xs: 12 }}>
                   <Stack direction="row" spacing={1}>
                     {servicePrincipals?.Metadata?.Success && (
-                      <Box width="100%">
+                      <Box sx={{
+                        width: "100%"
+                      }}>
                         <CippFormComponent
                           type="autoComplete"
                           fullWidth
                           label="Add a Service Principal (optional)"
                           placeholder="Select a Service Principal or enter an AppId if not listed"
                           name="servicePrincipal"
-                          createOption={true}
+                          creatable={true}
                           onCreateOption={onCreateServicePrincipal}
                           isFetching={spFetching}
                           options={servicePrincipals?.Results.map((sp) => {
@@ -1023,11 +1027,14 @@ const CippAppPermissionBuilder = ({
                         <Stack
                           direction={{ xs: "column", md: "row" }}
                           spacing={{ xs: 1, md: 2 }}
-                          justifyContent="space-between"
-                          alignItems={{ xs: "flex-start", md: "center" }}
                           useFlexGap
-                          sx={{ width: "100%", mr: 1, minWidth: 0 }}
-                        >
+                          sx={{
+                            justifyContent: "space-between",
+                            alignItems: { xs: "flex-start", md: "center" },
+                            width: "100%",
+                            mr: 1,
+                            minWidth: 0
+                          }}>
                           <Typography
                             variant="h6"
                             sx={{
@@ -1043,14 +1050,13 @@ const CippAppPermissionBuilder = ({
                           <Stack
                             direction="row"
                             spacing={{ xs: 1, md: 2 }}
-                            alignItems="center"
                             useFlexGap
                             sx={{
+                              alignItems: "center",
                               flexWrap: { xs: "wrap", md: "nowrap" },
                               minWidth: 0,
-                              maxWidth: "100%",
-                            }}
-                          >
+                              maxWidth: "100%"
+                            }}>
                             <Tooltip title="Copy Application ID to clipboard">
                               <Chip
                                 label={sp.appId}

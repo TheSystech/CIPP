@@ -1,4 +1,4 @@
-import { Layout as DashboardLayout } from '../../../../../layouts/index.js'
+import { Layout as DashboardLayout } from '../../../../../layouts/index'
 import { useSettings } from '../../../../../hooks/use-settings'
 import { useRouter } from 'next/router'
 import { ApiGetCall } from '../../../../../api/ApiCall'
@@ -1420,7 +1420,9 @@ const Page = () => {
       actionsData={userRequest.data?.[0]?.MailboxActionsData}
       isFetching={graphUserRequest.isLoading}
     >
-      <CippApiResults apiObject={userRequest} errorsOnly={true} />
+      {userRequest.isError && (
+        <CippApiResults apiObject={userRequest} errorsOnly={true} />
+      )}
       {graphUserRequest.isLoading && <CippFormSkeleton layout={[2, 1, 2, 2]} />}
       {graphUserRequest.isSuccess && (
         <Box
@@ -1433,7 +1435,12 @@ const Page = () => {
             {userRequest?.data?.[0]?.Mailbox?.[0]?.error && (
               <Grid size={12}>
                 <Alert severity="error">
-                  <Box display="flex" justifyContent="space-between">
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                    }}
+                  >
                     <Typography variant="body2">
                       {userRequest?.data?.[0]?.Mailbox?.[0]?.error.includes(
                         'Microsoft.Exchange.Configuration.Tasks.ManagementObjectNotFoundException'
@@ -1450,7 +1457,13 @@ const Page = () => {
                     </Button>
                   </Box>
                   <Collapse in={showDetails}>
-                    <Box mt={2}>{userRequest?.data?.[0]?.Mailbox?.[0]?.error}</Box>
+                    <Box
+                      sx={{
+                        mt: 2,
+                      }}
+                    >
+                      {userRequest?.data?.[0]?.Mailbox?.[0]?.error}
+                    </Box>
                   </Collapse>
                 </Alert>
               </Grid>

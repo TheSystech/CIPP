@@ -1,5 +1,5 @@
 import CippFormPage from '../../../../../components/CippFormPages/CippFormPage'
-import { Layout as DashboardLayout } from '../../../../../layouts/index.js'
+import { Layout as DashboardLayout } from '../../../../../layouts/index'
 import { useForm, useFormState } from 'react-hook-form'
 import { useSettings } from '../../../../../hooks/use-settings'
 import CippAddEditUser from '../../../../../components/CippFormPages/CippAddEditUser'
@@ -64,6 +64,12 @@ const Page = () => {
       // Use fallback for usageLocation if user's usageLocation is null/undefined
       const usageLocation = user?.usageLocation || userSettingsDefaults?.usageLocation || null
 
+      // The user query refetches after a save. That read can land before Graph has replicated
+      // the write (directory extension values in particular) and is then cached, so the values
+      // the form just submitted are kept instead of being replaced by a stale copy. On first
+      // load nothing has been entered yet and the fetched user wins.
+      const enteredCustomData = formControl.getValues('customData')
+
       formControl.reset({
         ...user,
         usageLocation: usageLocation,
@@ -73,6 +79,9 @@ const Page = () => {
           label: getCippLicenseTranslation([license]),
           value: license.skuId,
         })),
+        ...(enteredCustomData && Object.keys(enteredCustomData).length > 0
+          ? { customData: enteredCustomData }
+          : {}),
       })
       formControl.trigger()
     }

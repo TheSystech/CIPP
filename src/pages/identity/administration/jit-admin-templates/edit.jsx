@@ -1,7 +1,7 @@
 import { Box, Divider, Typography } from "@mui/material";
 import { Grid } from "@mui/system";
 import CippFormPage from "../../../../components/CippFormPages/CippFormPage";
-import { Layout as DashboardLayout } from "../../../../layouts/index.js";
+import { Layout as DashboardLayout } from "../../../../layouts/index";
 import { useForm, useWatch } from "react-hook-form";
 import CippFormComponent from "../../../../components/CippComponents/CippFormComponent";
 import { CippFormCondition } from "../../../../components/CippComponents/CippFormCondition";
@@ -343,7 +343,13 @@ const Page = () => {
               compareValue="create"
             >
               <Grid size={{ xs: 12 }}>
-                <Typography variant="body2" color="text.secondary" sx={{ mt: 2, mb: 1 }}>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    color: "text.secondary",
+                    mt: 2,
+                    mb: 1
+                  }}>
                   {isAllTenants
                     ? "Pre-fill user details (optional, for AllTenants templates)"
                     : "Pre-fill user details (optional, only for specific tenant templates)"}
@@ -409,7 +415,13 @@ const Page = () => {
               {!isAllTenants && (
                 <>
                   <Grid size={{ xs: 12 }}>
-                    <Typography variant="body2" color="text.secondary" sx={{ mt: 2, mb: 1 }}>
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        color: "text.secondary",
+                        mt: 2,
+                        mb: 1
+                      }}>
                       Select default user (optional, only for specific tenant templates)
                     </Typography>
                   </Grid>

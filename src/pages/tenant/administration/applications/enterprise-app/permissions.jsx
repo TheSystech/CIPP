@@ -1,4 +1,4 @@
-import { Layout as DashboardLayout } from '../../../../../layouts/index.js'
+import { Layout as DashboardLayout } from '../../../../../layouts/index'
 import { useSettings } from '../../../../../hooks/use-settings'
 import { useRouter } from 'next/router'
 import { ApiGetCall } from '../../../../../api/ApiCall'
@@ -10,7 +10,7 @@ import { CippEnterpriseAppSwitcher } from '../../../../../components/CippCompone
 import tabOptions from './tabOptions'
 import { CippCopyToClipBoard } from '../../../../../components/CippComponents/CippCopyToClipboard'
 import { Box } from '@mui/system'
-import { Typography, Button } from '@mui/material'
+import { Typography, Button, Alert } from '@mui/material'
 import { CippTimeAgo } from '../../../../../components/CippComponents/CippTimeAgo'
 import { useEffect, useMemo, useState } from 'react'
 import { CippHead } from '../../../../../components/CippComponents/CippHead'
@@ -58,9 +58,13 @@ const Page = () => {
     }
   }
 
-  const title = !spRequest.isSuccess
-    ? 'Loading...'
-    : spData?.displayName || spData?.appId || spObjectId || 'Enterprise application'
+  // Without a spId nothing is ever fetched, so falling back to the loading label here
+  // would leave it stuck forever.
+  const title = !spObjectId
+    ? 'No Enterprise Application Selected'
+    : !spRequest.isSuccess
+      ? 'Loading...'
+      : spData?.displayName || spData?.appId || spObjectId || 'Enterprise application'
 
   const subtitle =
     spRequest.isSuccess && spData
@@ -128,12 +132,20 @@ const Page = () => {
       subtitle={subtitle}
       actions={spData ? appActions : []}
       actionsData={actionsData}
-      isFetching={spRequest.isLoading}
+      isFetching={!!spObjectId && spRequest.isLoading}
     >
-      {spRequest.isLoading && <CippFormSkeleton layout={[1, 1, 1]} />}
+      {!spObjectId && (
+        <Alert severity="info" sx={{ m: 2 }}>
+          No enterprise application selected. Open this page from the Enterprise Apps list, or
+          pick one from the switcher above.
+        </Alert>
+      )}
+      {spObjectId && spRequest.isLoading && <CippFormSkeleton layout={[1, 1, 1]} />}
       {spRequest.isSuccess && !spData && (
         <Box sx={{ flexGrow: 1, py: 4 }}>
-          <Typography color="text.secondary">
+          <Typography sx={{
+            color: "text.secondary"
+          }}>
             No enterprise application found for this service principal ID.
           </Typography>
         </Box>
@@ -149,7 +161,7 @@ const Page = () => {
         </Box>
       )}
     </HeaderedTabbedLayout>
-  )
+  );
 }
 
 Page.getLayout = (page) => <DashboardLayout>{page}</DashboardLayout>

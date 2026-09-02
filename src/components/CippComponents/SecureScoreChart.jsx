@@ -1,4 +1,5 @@
 import { Box, Typography, Divider, Skeleton } from "@mui/material";
+import { useTheme } from "@mui/material/styles";
 import {
   LineChart,
   Line,
@@ -10,6 +11,10 @@ import {
 } from "recharts";
 
 export const SecureScoreChart = ({ data, isLoading }) => {
+  // recharts has no theme; hard-coded light greys drew a near-white grid and a white tooltip
+  // over the dark card.
+  const theme = useTheme();
+
   if (isLoading) {
     return (
       <>
@@ -18,7 +23,12 @@ export const SecureScoreChart = ({ data, isLoading }) => {
             <Skeleton variant="rectangular" width="100%" height={200} />
           </Box>
         </Box>
-        <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+        <Typography
+          variant="body2"
+          sx={{
+            color: "text.secondary",
+            mt: 2
+          }}>
           The Secure Score measures your security posture across your tenant.
         </Typography>
         <Divider sx={{ mt: 2 }} />
@@ -51,17 +61,26 @@ export const SecureScoreChart = ({ data, isLoading }) => {
               height: "100%",
             }}
           >
-            <Typography variant="body2" color="text.secondary">
+            <Typography variant="body2" sx={{
+              color: "text.secondary"
+            }}>
               No secure score data available
             </Typography>
           </Box>
         </Box>
-        <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+        <Typography
+          variant="body2"
+          sx={{
+            color: "text.secondary",
+            mt: 2
+          }}>
           The Secure Score measures your security posture across your tenant.
         </Typography>
         <Divider sx={{ mt: 2 }} />
         <Box sx={{ pt: 2 }}>
-          <Typography variant="body2" color="text.secondary">
+          <Typography variant="body2" sx={{
+            color: "text.secondary"
+          }}>
             Enable secure score monitoring in your tenant
           </Typography>
         </Box>
@@ -90,13 +109,14 @@ export const SecureScoreChart = ({ data, isLoading }) => {
       <Box sx={{ height: 250 }}>
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={chartData} margin={{ left: 12, right: 12, top: 10, bottom: 10 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e0e0e0" />
+            <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.divider} />
             <XAxis dataKey="date" tick={{ fontSize: 12 }} tickMargin={8} />
             <YAxis tick={{ fontSize: 12 }} tickMargin={8} domain={[0, "dataMax + 20"]} />
             <RechartsTooltip
               contentStyle={{
-                backgroundColor: "rgba(255, 255, 255, 0.95)",
-                border: "1px solid #ccc",
+                backgroundColor: theme.palette.background.paper,
+                color: theme.palette.text.primary,
+                border: `1px solid ${theme.palette.divider}`,
                 borderRadius: "4px",
               }}
               formatter={(value, name) => {
@@ -116,34 +136,51 @@ export const SecureScoreChart = ({ data, isLoading }) => {
           </LineChart>
         </ResponsiveContainer>
       </Box>
-      <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+      <Typography
+        variant="body2"
+        sx={{
+          color: "text.secondary",
+          mt: 2
+        }}>
         The Secure Score measures your security posture across your tenant.
       </Typography>
       <Divider sx={{ mt: 2 }} />
       <Box sx={{ display: "flex", gap: 2, pt: 2 }}>
         <Box sx={{ flex: 1 }}>
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="caption" sx={{
+            color: "text.secondary"
+          }}>
             Latest %
           </Typography>
-          <Typography variant="h6" fontWeight="bold">
+          <Typography variant="h6" sx={{
+            fontWeight: "bold"
+          }}>
             {latestPercentage}%
           </Typography>
         </Box>
         <Divider orientation="vertical" flexItem />
         <Box sx={{ flex: 1 }}>
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="caption" sx={{
+            color: "text.secondary"
+          }}>
             Current Score
           </Typography>
-          <Typography variant="h6" fontWeight="bold">
+          <Typography variant="h6" sx={{
+            fontWeight: "bold"
+          }}>
             {latestScore.currentScore.toFixed(2)}
           </Typography>
         </Box>
         <Divider orientation="vertical" flexItem />
         <Box sx={{ flex: 1 }}>
-          <Typography variant="caption" color="text.secondary">
+          <Typography variant="caption" sx={{
+            color: "text.secondary"
+          }}>
             Max Score
           </Typography>
-          <Typography variant="h6" fontWeight="bold">
+          <Typography variant="h6" sx={{
+            fontWeight: "bold"
+          }}>
             {latestScore.maxScore.toFixed(2)}
           </Typography>
         </Box>

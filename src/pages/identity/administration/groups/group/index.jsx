@@ -1,4 +1,4 @@
-import { Layout as DashboardLayout } from "../../../../../layouts/index.js";
+import { Layout as DashboardLayout } from "../../../../../layouts/index";
 import { useSettings } from "../../../../../hooks/use-settings";
 import { useRouter } from "next/router";
 import { ApiGetCall, ApiPostCall } from "../../../../../api/ApiCall";
@@ -24,7 +24,7 @@ import tabOptions from "./tabOptions";
 import { CippCopyToClipBoard } from "../../../../../components/CippComponents/CippCopyToClipboard";
 import { Box, Stack } from "@mui/system";
 import { Grid } from "@mui/system";
-import { SvgIcon, Typography, Card, CardHeader, Divider } from "@mui/material";
+import { SvgIcon, Typography, Card, CardHeader, Divider, Alert } from "@mui/material";
 import { CippBannerListCard } from "../../../../../components/CippCards/CippBannerListCard";
 import { CippTimeAgo } from "../../../../../components/CippComponents/CippTimeAgo";
 import { useEffect, useState, useRef } from "react";
@@ -126,8 +126,13 @@ const Page = () => {
   const groupOwners = groupOwnersData?.body?.value || [];
   const groupMemberOf = groupMemberOfData?.body?.value || [];
 
-  // Set the title and subtitle for the layout
-  const title = groupRequest.isSuccess ? groupData?.displayName : "Loading...";
+  // Set the title and subtitle for the layout. Without a groupId nothing is ever fetched,
+  // so falling back to the loading label here would leave it stuck forever.
+  const title = !groupId
+    ? "No Group Selected"
+    : groupRequest.isSuccess
+      ? groupData?.displayName
+      : "Loading...";
 
   const subtitle = groupRequest.isSuccess
     ? [
@@ -715,9 +720,15 @@ const Page = () => {
       actions={groupActions}
       actionsData={data}
       subtitle={subtitle}
-      isFetching={groupRequest.isLoading}
+      isFetching={!!groupId && groupRequest.isLoading}
     >
-      {groupRequest.isLoading && <CippFormSkeleton layout={[2, 1, 2, 2]} />}
+      {!groupId && (
+        <Alert severity="info" sx={{ m: 2 }}>
+          No group selected. Open this page from the Groups list, or pick one from the switcher
+          above.
+        </Alert>
+      )}
+      {groupId && groupRequest.isLoading && <CippFormSkeleton layout={[2, 1, 2, 2]} />}
       {groupRequest.isSuccess && (
         <Box
           sx={{
@@ -735,12 +746,16 @@ const Page = () => {
                   <PropertyListItem
                     divider
                     value={
-                      <Stack alignItems="center" spacing={1}>
+                      <Stack spacing={1} sx={{
+                        alignItems: "center"
+                      }}>
                         <SvgIcon sx={{ fontSize: 64 }}>
                           <Group />
                         </SvgIcon>
                         <Typography variant="h6">{data?.displayName || "N/A"}</Typography>
-                        <Typography variant="body2" color="text.secondary">
+                        <Typography variant="body2" sx={{
+                          color: "text.secondary"
+                        }}>
                           {getGroupType()}
                         </Typography>
                       </Stack>
@@ -752,7 +767,9 @@ const Page = () => {
                     value={
                       <Grid container spacing={2}>
                         <Grid size={{ xs: 12 }}>
-                          <Typography variant="inherit" color="text.primary" gutterBottom>
+                          <Typography variant="inherit" gutterBottom sx={{
+                            color: "text.primary"
+                          }}>
                             Display Name:
                           </Typography>
                           <Typography variant="inherit">
@@ -760,7 +777,9 @@ const Page = () => {
                           </Typography>
                         </Grid>
                         <Grid size={{ xs: 12 }}>
-                          <Typography variant="inherit" color="text.primary" gutterBottom>
+                          <Typography variant="inherit" gutterBottom sx={{
+                            color: "text.primary"
+                          }}>
                             Group ID:
                           </Typography>
                           <Typography variant="inherit">
@@ -769,7 +788,9 @@ const Page = () => {
                         </Grid>
                         {data?.mail && (
                           <Grid size={{ xs: 12 }}>
-                            <Typography variant="inherit" color="text.primary" gutterBottom>
+                            <Typography variant="inherit" gutterBottom sx={{
+                              color: "text.primary"
+                            }}>
                               Email Address:
                             </Typography>
                             <Typography variant="inherit">{data.mail || "N/A"}</Typography>
@@ -777,20 +798,26 @@ const Page = () => {
                         )}
                         {data?.description && (
                           <Grid size={{ xs: 12 }}>
-                            <Typography variant="inherit" color="text.primary" gutterBottom>
+                            <Typography variant="inherit" gutterBottom sx={{
+                              color: "text.primary"
+                            }}>
                               Description:
                             </Typography>
                             <Typography variant="inherit">{data.description || "N/A"}</Typography>
                           </Grid>
                         )}
                         <Grid size={{ xs: 12 }}>
-                          <Typography variant="inherit" color="text.primary" gutterBottom>
+                          <Typography variant="inherit" gutterBottom sx={{
+                            color: "text.primary"
+                          }}>
                             Group Type:
                           </Typography>
                           <Typography variant="inherit">{getGroupType()}</Typography>
                         </Grid>
                         <Grid size={{ xs: 12 }}>
-                          <Typography variant="inherit" color="text.primary" gutterBottom>
+                          <Typography variant="inherit" gutterBottom sx={{
+                            color: "text.primary"
+                          }}>
                             Mail Enabled:
                           </Typography>
                           <Typography variant="inherit">
@@ -798,7 +825,9 @@ const Page = () => {
                           </Typography>
                         </Grid>
                         <Grid size={{ xs: 12 }}>
-                          <Typography variant="inherit" color="text.primary" gutterBottom>
+                          <Typography variant="inherit" gutterBottom sx={{
+                            color: "text.primary"
+                          }}>
                             Security Enabled:
                           </Typography>
                           <Typography variant="inherit">
@@ -807,7 +836,9 @@ const Page = () => {
                         </Grid>
                         {data?.createdDateTime && (
                           <Grid size={{ xs: 12 }}>
-                            <Typography variant="inherit" color="text.primary" gutterBottom>
+                            <Typography variant="inherit" gutterBottom sx={{
+                              color: "text.primary"
+                            }}>
                               Created Date:
                             </Typography>
                             <Typography variant="inherit">
@@ -819,7 +850,9 @@ const Page = () => {
                         )}
                         {data?.onPremisesSyncEnabled && (
                           <Grid size={{ xs: 12 }}>
-                            <Typography variant="inherit" color="text.primary" gutterBottom>
+                            <Typography variant="inherit" gutterBottom sx={{
+                              color: "text.primary"
+                            }}>
                               Synced from AD:
                             </Typography>
                             <Typography variant="inherit">

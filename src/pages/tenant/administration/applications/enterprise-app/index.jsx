@@ -1,4 +1,4 @@
-import { Layout as DashboardLayout } from '../../../../../layouts/index.js'
+import { Layout as DashboardLayout } from '../../../../../layouts/index'
 import { useSettings } from '../../../../../hooks/use-settings'
 import { useRouter } from 'next/router'
 import { ApiGetCall, ApiPostCall } from '../../../../../api/ApiCall'
@@ -11,7 +11,7 @@ import tabOptions from './tabOptions'
 import { CippCopyToClipBoard } from '../../../../../components/CippComponents/CippCopyToClipboard'
 import { Box, Stack } from '@mui/system'
 import { Grid } from '@mui/system'
-import { Typography, Card, CardHeader, Divider, Button, SvgIcon } from '@mui/material'
+import { Typography, Card, CardHeader, Divider, Button, SvgIcon, Alert } from '@mui/material'
 import { CippBannerListCard } from '../../../../../components/CippCards/CippBannerListCard'
 import { CippTimeAgo } from '../../../../../components/CippComponents/CippTimeAgo'
 import { useEffect, useMemo, useState, useRef } from 'react'
@@ -118,9 +118,13 @@ const Page = () => {
   const ownersData = bulkData.find((item) => item.id === 'owners')
   const owners = ownersData?.body?.value ?? []
 
-  const title = !spRequest.isSuccess
-    ? 'Loading...'
-    : spData?.displayName || spData?.appId || spObjectId || 'Enterprise application'
+  // Without a spId nothing is ever fetched, so falling back to the loading label here
+  // would leave it stuck forever.
+  const title = !spObjectId
+    ? 'No Enterprise Application Selected'
+    : !spRequest.isSuccess
+      ? 'Loading...'
+      : spData?.displayName || spData?.appId || spObjectId || 'Enterprise application'
 
   const data = spData
 
@@ -301,12 +305,20 @@ const Page = () => {
       subtitle={subtitle}
       actions={spData ? appActions : []}
       actionsData={actionsData}
-      isFetching={spRequest.isLoading}
+      isFetching={!!spObjectId && spRequest.isLoading}
     >
-      {spRequest.isLoading && <CippFormSkeleton layout={[2, 1, 2, 2]} />}
+      {!spObjectId && (
+        <Alert severity="info" sx={{ m: 2 }}>
+          No enterprise application selected. Open this page from the Enterprise Apps list, or
+          pick one from the switcher above.
+        </Alert>
+      )}
+      {spObjectId && spRequest.isLoading && <CippFormSkeleton layout={[2, 1, 2, 2]} />}
       {spRequest.isSuccess && !spData && (
         <Box sx={{ flexGrow: 1, py: 4 }}>
-          <Typography color="text.secondary">
+          <Typography sx={{
+            color: "text.secondary"
+          }}>
             No enterprise application found for this service principal ID.
           </Typography>
         </Box>
@@ -323,12 +335,16 @@ const Page = () => {
                   <PropertyListItem
                     divider
                     value={
-                      <Stack alignItems="center" spacing={1}>
+                      <Stack spacing={1} sx={{
+                        alignItems: "center"
+                      }}>
                         <SvgIcon sx={{ fontSize: 64 }}>
                           <Apps />
                         </SvgIcon>
                         <Typography variant="h6">{data?.displayName || 'N/A'}</Typography>
-                        <Typography variant="body2" color="text.secondary">
+                        <Typography variant="body2" sx={{
+                          color: "text.secondary"
+                        }}>
                           {data?.accountEnabled === false ? 'Disabled' : 'Enabled'}
                         </Typography>
                       </Stack>
@@ -340,43 +356,57 @@ const Page = () => {
                     value={
                       <Grid container spacing={2}>
                         <Grid size={{ xs: 12 }}>
-                          <Typography variant="inherit" color="text.primary" gutterBottom>
+                          <Typography variant="inherit" gutterBottom sx={{
+                            color: "text.primary"
+                          }}>
                             Display name:
                           </Typography>
                           <Typography variant="inherit">{data?.displayName || 'N/A'}</Typography>
                         </Grid>
                         <Grid size={{ xs: 12 }}>
-                          <Typography variant="inherit" color="text.primary" gutterBottom>
+                          <Typography variant="inherit" gutterBottom sx={{
+                            color: "text.primary"
+                          }}>
                             Application (client) ID:
                           </Typography>
                           <Typography variant="inherit">{data?.appId || 'N/A'}</Typography>
                         </Grid>
                         <Grid size={{ xs: 12 }}>
-                          <Typography variant="inherit" color="text.primary" gutterBottom>
+                          <Typography variant="inherit" gutterBottom sx={{
+                            color: "text.primary"
+                          }}>
                             Object ID:
                           </Typography>
                           <Typography variant="inherit">{data?.id || 'N/A'}</Typography>
                         </Grid>
                         <Grid size={{ xs: 12 }}>
-                          <Typography variant="inherit" color="text.primary" gutterBottom>
+                          <Typography variant="inherit" gutterBottom sx={{
+                            color: "text.primary"
+                          }}>
                             Sign-in audience:
                           </Typography>
                           <Typography variant="inherit">{data?.signInAudience || 'N/A'}</Typography>
                         </Grid>
                         <Grid size={{ xs: 12 }}>
-                          <Typography variant="inherit" color="text.primary" gutterBottom>
+                          <Typography variant="inherit" gutterBottom sx={{
+                            color: "text.primary"
+                          }}>
                             Publisher:
                           </Typography>
                           <Typography variant="inherit">{data?.publisherName || 'N/A'}</Typography>
                         </Grid>
                         <Grid size={{ xs: 12 }}>
-                          <Typography variant="inherit" color="text.primary" gutterBottom>
+                          <Typography variant="inherit" gutterBottom sx={{
+                            color: "text.primary"
+                          }}>
                             Homepage:
                           </Typography>
                           <Typography variant="inherit">{data?.homepage || 'N/A'}</Typography>
                         </Grid>
                         <Grid size={{ xs: 12 }}>
-                          <Typography variant="inherit" color="text.primary" gutterBottom>
+                          <Typography variant="inherit" gutterBottom sx={{
+                            color: "text.primary"
+                          }}>
                             Created:
                           </Typography>
                           <Typography variant="inherit">
@@ -423,7 +453,7 @@ const Page = () => {
         </Box>
       )}
     </HeaderedTabbedLayout>
-  )
+  );
 }
 
 Page.getLayout = (page) => <DashboardLayout>{page}</DashboardLayout>
