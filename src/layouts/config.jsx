@@ -224,6 +224,11 @@ export const nativeMenuItems = [
         scope: 'global',
       },
       {
+        title: 'Security Simulations',
+        path: '/tenant/security-simulator',
+        permissions: ['Tenant.SecuritySimulations.*'],
+      },
+      {
         title: 'Domains Analyser',
         path: '/tenant/standards/domains-analyser',
         permissions: ['Tenant.DomainAnalyser.*'],
@@ -1075,7 +1080,7 @@ export const nativeMenuItems = [
             title: 'IP Database',
             path: '/tenant/tools/geoiplookup',
             docsPath: 'tools/tenant-tools/geoiplookup',
-            permissions: ['CIPP.Core.*'],
+            permissions: ['CIPP.IPDatabase.*'],
             scope: 'global',
           },
         ],
@@ -1125,20 +1130,20 @@ export const nativeMenuItems = [
       },
       {
         title: 'Dark Web Tools',
-        permissions: ['CIPP.Core.*'],
+        permissions: ['CIPP.BreachLookup.*'],
         items: [
           {
             title: 'Tenant Breach Lookup',
             path: '/tools/tenantbreachlookup',
             docsPath: 'tools/dark-web-tools/tenant-breach-lookup',
-            permissions: ['CIPP.Core.*'],
+            permissions: ['CIPP.BreachLookup.*'],
             scope: 'global',
           },
           {
             title: 'Breach Lookup',
             path: '/tools/breachlookup',
             docsPath: 'tools/dark-web-tools/breach-lookup',
-            permissions: ['CIPP.Core.*'],
+            permissions: ['CIPP.BreachLookup.*'],
             scope: 'global',
           },
         ],
@@ -1147,7 +1152,7 @@ export const nativeMenuItems = [
         title: 'Report Builder',
         path: '/tools/report-builder/generated',
         roles: ['admin', 'superadmin'],
-        permissions: ['CIPP.Core.*'],
+        permissions: ['CIPP.ReportBuilder.*'],
         scope: 'global',
       },
       {
@@ -1161,14 +1166,14 @@ export const nativeMenuItems = [
         title: 'Template Library',
         path: '/tools/templatelib',
         roles: ['editor', 'admin', 'superadmin'],
-        permissions: ['CIPP.Core.*'],
+        permissions: ['CIPP.TemplateLibrary.*'],
         scope: 'global',
       },
       {
         title: 'Catalog',
         path: '/tools/community-repos',
         roles: ['editor', 'admin', 'superadmin'],
-        permissions: ['CIPP.Core.*'],
+        permissions: ['CIPP.TemplateLibrary.*'],
         scope: 'global',
       },
       {
@@ -1210,7 +1215,7 @@ export const nativeMenuItems = [
         title: 'Logbook',
         path: '/cipp/logs',
         roles: ['editor', 'admin', 'superadmin'],
-        permissions: ['CIPP.Core.*'],
+        permissions: ['CIPP.Logs.*'],
         scope: 'global',
       },
       {
@@ -1256,7 +1261,7 @@ export const nativeMenuItems = [
           {
             // Lands on cipp-roles, not cipp-users: cipp-users is gated by the
             // SuperAdminNG feature flag, and the nav filter drops any item whose
-            // path is in a disabled flag's Pages list — pointing here at cipp-users
+            // path is in a disabled flag's Pages list - pointing here at cipp-users
             // would hide the whole Authentication group (including the ungated
             // SSO and SAM App pages) on non-NG instances.
             title: 'Authentication',
