@@ -94,6 +94,11 @@ export const nativeMenuItems = [
             path: '/identity/administration/offboarding-wizard',
             permissions: ['Identity.User.*'],
           },
+          {
+            title: 'Business Email Compromise',
+            path: '/identity/administration/bec',
+            permissions: ['Identity.User.*'],
+          },
         ],
       },
       {
@@ -238,12 +243,6 @@ export const nativeMenuItems = [
         title: 'Standards & Drift',
         path: '/tenant/standards/alignment',
         permissions: ['Tenant.Standards.*'],
-        scope: 'global',
-      },
-      {
-        title: 'Best Practice Analyser',
-        path: '/tenant/standards/bpa-report',
-        permissions: ['Tenant.BestPracticeAnalyser.*'],
         scope: 'global',
       },
       {
@@ -484,47 +483,47 @@ export const nativeMenuItems = [
         <CippIcons.SparklesIcon />
       </SvgIcon>
     ),
-    permissions: ['Tenant.Standards.*'],
+    permissions: ['Tenant.AI.*'],
     items: [
       {
         title: 'Shadow AI Discovery',
         path: '/copilot/shadow-ai',
-        permissions: ['Tenant.Standards.*'],
+        permissions: ['Tenant.AI.*'],
       },
       {
         title: 'Copilot Settings',
         path: '/copilot/settings',
-        permissions: ['Tenant.Standards.*'],
+        permissions: ['Tenant.AI.*'],
       },
       {
         title: 'Agent365',
-        permissions: ['Tenant.Standards.*'],
+        permissions: ['Tenant.AI.*'],
         items: [
           {
             title: 'Packages',
             path: '/copilot/agent365/packages',
-            permissions: ['Tenant.Standards.*'],
+            permissions: ['Tenant.AI.*'],
           },
         ],
       },
       {
         title: 'Reports',
-        permissions: ['Tenant.Standards.*'],
+        permissions: ['Tenant.AI.*'],
         items: [
           {
             title: 'Copilot Adoption',
             path: '/copilot/reports/copilot-adoption',
-            permissions: ['Tenant.Standards.*'],
+            permissions: ['Tenant.AI.*'],
           },
           {
             title: 'Copilot Usage Trend',
             path: '/copilot/reports/copilot-trend',
-            permissions: ['Tenant.Standards.*'],
+            permissions: ['Tenant.AI.*'],
           },
           {
             title: 'Copilot User Activity',
             path: '/copilot/reports/copilot-usage',
-            permissions: ['Tenant.Standards.*'],
+            permissions: ['Tenant.AI.*'],
           },
         ],
       },

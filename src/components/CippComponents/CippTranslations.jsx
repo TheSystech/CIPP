@@ -29,6 +29,8 @@ export const CippTranslations = {
   mode: 'Mode',
   triggeredBy: 'Triggered By',
   baselineName: 'Baseline',
+  source: 'Synced From',
+  hasLocalChanges: 'Local Changes',
   secureScoreImpact: 'Secure Score Impact',
   // Security Simulations
   title: 'Title',
@@ -178,10 +180,11 @@ export const CippTranslations = {
   LastChecked: 'Last Checked',
   ResolvedAt: 'Resolved',
   ReopenCount: 'Reopened',
-  AcknowledgedBy: 'Acknowledged By',
-  AcknowledgedAt: 'Acknowledged At',
-  AcknowledgeNote: 'Acknowledgement Note',
   SnoozedBy: 'Snoozed By',
   SnoozeReason: 'Snooze Reason',
   RemainingDays: 'Remaining Days',
+  UntilResolved: 'Until Resolved',
+  KeepVisible: 'Kept Visible',
+  SnoozeUntilResolved: 'Snoozed Until Resolved',
+  SnoozeVisible: 'Kept Visible',
 }
